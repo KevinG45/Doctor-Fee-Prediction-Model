@@ -67,13 +67,15 @@ This project aims to create a web interface that allows users to predict doctor 
 
 ## 🏥 Challenges and Learnings
 
-**1. Feature Engineering:** Handled complex features, especially those with diverse and numerous categories. 
+**1. Data Extraction:** We intially faced difficulties to get the data from the server,as
+we had to explore it, and tried to figure it out.. 
 
 **2. Model Selection:**  Explored different ML models to identify the Best models.
 
 **3. Hyperparameter Tunning:**  Hyperparameter tuning was time-consuming due to limited time for model development
 
-**4. Model Deployment:**  Explored model deployment options.
+**4. Creating the webpage:**  As we are new to this concept, this was quiet challenging and
+interesting in creating it.
 
  
 ## 🏥 Conclusion
