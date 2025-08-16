@@ -4,6 +4,23 @@ import time
 import json
 from urllib.parse import quote
 from practo_scraper.items import DoctorItem
+import sys
+import os
+
+# Add parent directory to path to import config
+sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__)))))
+try:
+    from config import CITIES, SPECIALITIES
+except ImportError:
+    # Fallback if config import fails
+    CITIES = ['Bangalore', 'Delhi', 'Mumbai']
+    SPECIALITIES = [
+        'Cardiologist', 'Chiropractor', 'Dentist', 'Dermatologist', 
+        'Dietitian/Nutritionist', 'Gastroenterologist', 'bariatric surgeon', 
+        'Gynecologist', 'Infertility Specialist', 'Neurologist', 'Neurosurgeon', 
+        'Ophthalmologist', 'Orthopedist', 'Pediatrician', 'Physiotherapist', 
+        'Psychiatrist', 'Pulmonologist', 'Rheumatologist', 'Urologist'
+    ]
 
 
 class PractoDoctorsSimpleSpider(scrapy.Spider):
@@ -11,14 +28,8 @@ class PractoDoctorsSimpleSpider(scrapy.Spider):
     allowed_domains = ["practo.com"]
     
     # Configuration
-    cities = ['Bangalore', 'Delhi', 'Mumbai']
-    specialities = [
-        'Cardiologist', 'Chiropractor', 'Dentist', 'Dermatologist', 
-        'Dietitian/Nutritionist', 'Gastroenterologist', 'bariatric surgeon', 
-        'Gynecologist', 'Infertility Specialist', 'Neurologist', 'Neurosurgeon', 
-        'Ophthalmologist', 'Orthopedist', 'Pediatrician', 'Physiotherapist', 
-        'Psychiatrist', 'Pulmonologist', 'Rheumatologist', 'Urologist'
-    ]
+    cities = CITIES
+    specialities = SPECIALITIES
     
     custom_settings = {
         'DOWNLOAD_DELAY': 3,
@@ -32,7 +43,7 @@ class PractoDoctorsSimpleSpider(scrapy.Spider):
         
         for city in self.cities:
             for speciality in self.specialities:
-                # Build the search URL for Practo
+                # Build the search URL for Practo with pagination
                 search_query = quote(f'[{{"word":"{speciality}","autocompleted":true,"category":"subspeciality"}}]')
                 url = f"https://www.practo.com/search/doctors?results_type=doctor&q={search_query}&city={city}"
                 
@@ -41,6 +52,7 @@ class PractoDoctorsSimpleSpider(scrapy.Spider):
                     meta={
                         "city": city,
                         "speciality": speciality,
+                        "page": 1,
                     },
                     callback=self.parse_doctors_listing,
                     errback=self.handle_error,
@@ -51,11 +63,12 @@ class PractoDoctorsSimpleSpider(scrapy.Spider):
         
         city = response.meta['city']
         speciality = response.meta['speciality']
+        page = response.meta.get('page', 1)
         
         # Extract doctor profile links
         doctor_links = response.css('div.u-border-general--bottom a[href*="/doctor/"]::attr(href)').getall()
         
-        self.logger.info(f"Found {len(doctor_links)} doctors for {speciality} in {city}")
+        self.logger.info(f"Found {len(doctor_links)} doctors for {speciality} in {city} (page {page})")
         
         for link in doctor_links:
             if link:
@@ -70,6 +83,43 @@ class PractoDoctorsSimpleSpider(scrapy.Spider):
                     callback=self.parse_doctor_profile,
                     errback=self.handle_error,
                 )
+        
+        # Check for pagination - look for "Load More" button or next page link
+        has_more_results = False
+        
+        # Check for "Load More" button (common pattern on Practo)
+        load_more_button = response.css('button[data-qa-id="load_more_doctors"], .load-more-button, .load-more')
+        if load_more_button:
+            has_more_results = True
+        
+        # Check for next page link 
+        next_page_links = response.css('a[aria-label="Next"], .pagination a:contains("Next"), .next-page')
+        if next_page_links:
+            has_more_results = True
+            
+        # Also check if we have the expected number of results (indicating more might be available)
+        if len(doctor_links) >= 20:  # Practo typically shows 20-50 doctors per page
+            has_more_results = True
+        
+        # Generate next page request if more results available and within page limit
+        max_pages = 20  # Reasonable limit to prevent infinite loops
+        if has_more_results and page < max_pages:
+            next_page = page + 1
+            search_query = quote(f'[{{"word":"{speciality}","autocompleted":true,"category":"subspeciality"}}]')
+            next_url = f"https://www.practo.com/search/doctors?results_type=doctor&q={search_query}&city={city}&page={next_page}"
+            
+            self.logger.info(f"Requesting next page {next_page} for {speciality} in {city}")
+            
+            yield Request(
+                url=next_url,
+                meta={
+                    "city": city,
+                    "speciality": speciality,
+                    "page": next_page,
+                },
+                callback=self.parse_doctors_listing,
+                errback=self.handle_error,
+            )
     
     def parse_doctor_profile(self, response):
         """Parse individual doctor profile page"""
