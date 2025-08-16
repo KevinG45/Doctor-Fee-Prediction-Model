@@ -1,0 +1,187 @@
+import scrapy
+from scrapy_playwright.page import PageMethod
+from urllib.parse import urlencode
+import time
+from practo_scraper.items import DoctorItem
+
+
+class PractoDoctorsSpider(scrapy.Spider):
+    name = "practo_doctors"
+    allowed_domains = ["practo.com"]
+    
+    # Configuration
+    cities = ['Bangalore', 'Delhi', 'Mumbai']
+    specialities = [
+        'Cardiologist', 'Chiropractor', 'Dentist', 'Dermatologist', 
+        'Dietitian/Nutritionist', 'Gastroenterologist', 'bariatric surgeon', 
+        'Gynecologist', 'Infertility Specialist', 'Neurologist', 'Neurosurgeon', 
+        'Ophthalmologist', 'Orthopedist', 'Pediatrician', 'Physiotherapist', 
+        'Psychiatrist', 'Pulmonologist', 'Rheumatologist', 'Urologist'
+    ]
+    
+    def start_requests(self):
+        """Generate initial requests for all city-speciality combinations"""
+        
+        for city in self.cities:
+            for speciality in self.specialities:
+                # Build the search URL for Practo
+                search_query = f'[{{"word":"{speciality}","autocompleted":true,"category":"subspeciality"}}]'
+                url = f"https://www.practo.com/search/doctors?results_type=doctor&q={search_query}&city={city}"
+                
+                yield scrapy.Request(
+                    url=url,
+                    meta={
+                        "playwright": True,
+                        "playwright_include_page": True,
+                        "playwright_page_methods": [
+                            PageMethod("wait_for_selector", "div.u-border-general--bottom", timeout=10000),
+                            PageMethod("evaluate", "window.scrollTo(0, document.body.scrollHeight)"),
+                            PageMethod("wait_for_timeout", 2000),
+                        ],
+                        "city": city,
+                        "speciality": speciality,
+                    },
+                    callback=self.parse_doctors_listing,
+                    errback=self.handle_error,
+                )
+    
+    async def parse_doctors_listing(self, response):
+        """Parse the doctors listing page and extract doctor profile URLs"""
+        
+        city = response.meta['city']
+        speciality = response.meta['speciality']
+        
+        page = response.meta["playwright_page"]
+        
+        try:
+            # Scroll to load all doctors
+            await self.scroll_to_load_all(page)
+            
+            # Extract doctor profile links
+            doctor_links = await page.query_selector_all('div.u-border-general--bottom a[href*="/doctor/"]')
+            
+            self.logger.info(f"Found {len(doctor_links)} doctors for {speciality} in {city}")
+            
+            for link in doctor_links:
+                href = await link.get_attribute('href')
+                if href:
+                    profile_url = response.urljoin(href)
+                    
+                    yield scrapy.Request(
+                        url=profile_url,
+                        meta={
+                            "playwright": True,
+                            "playwright_include_page": True,
+                            "playwright_page_methods": [
+                                PageMethod("wait_for_selector", "h1.c-profile__title", timeout=10000),
+                            ],
+                            "city": city,
+                            "speciality": speciality,
+                        },
+                        callback=self.parse_doctor_profile,
+                        errback=self.handle_error,
+                    )
+                    
+        except Exception as e:
+            self.logger.error(f"Error parsing doctors listing for {speciality} in {city}: {str(e)}")
+        
+        finally:
+            await page.close()
+    
+    async def scroll_to_load_all(self, page):
+        """Scroll to load all doctors on the page"""
+        try:
+            previous_height = await page.evaluate("document.body.scrollHeight")
+            
+            while True:
+                # Scroll to bottom
+                await page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
+                await page.wait_for_timeout(2000)
+                
+                # Get new height
+                new_height = await page.evaluate("document.body.scrollHeight")
+                
+                # Break if no more content to load
+                if new_height == previous_height:
+                    break
+                    
+                previous_height = new_height
+                
+        except Exception as e:
+            self.logger.warning(f"Error during scrolling: {str(e)}")
+    
+    async def parse_doctor_profile(self, response):
+        """Parse individual doctor profile page"""
+        
+        city = response.meta['city']
+        speciality = response.meta['speciality']
+        page = response.meta["playwright_page"]
+        
+        try:
+            item = DoctorItem()
+            
+            # Extract doctor information
+            item['city'] = city
+            item['speciality'] = speciality
+            item['profile_url'] = response.url
+            
+            # Name
+            name_element = await page.query_selector('h1.c-profile__title')
+            if name_element:
+                item['name'] = await name_element.inner_text()
+            
+            # Degree
+            degree_element = await page.query_selector('p.c-profile__details')
+            if degree_element:
+                item['degree'] = await degree_element.inner_text()
+            
+            # Years of experience
+            experience_elements = await page.query_selector_all('div.c-profile__details h2')
+            if experience_elements:
+                experience_text = await experience_elements[-1].inner_text()
+                item['year_of_experience'] = experience_text
+            
+            # Location
+            location_element = await page.query_selector('h4.c-profile--clinic__location')
+            if location_element:
+                item['location'] = await location_element.inner_text()
+            
+            # DP Score (rating)
+            score_element = await page.query_selector('span.u-green-text.u-bold.u-large-font')
+            if score_element:
+                item['dp_score'] = await score_element.inner_text()
+            
+            # Number of patient votes
+            votes_element = await page.query_selector('span.u-smallest-font.u-grey_3-text')
+            if votes_element:
+                item['npv'] = await votes_element.inner_text()
+            
+            # Consultation fee
+            fee_element = await page.query_selector('span.u-strike')
+            if fee_element:
+                item['consultation_fee'] = await fee_element.inner_text()
+            else:
+                # Try alternative selector
+                fee_element = await page.query_selector('div.u-f-right.u-large-font.u-bold.u-valign--middle.u-lheight-normal')
+                if fee_element:
+                    item['consultation_fee'] = await fee_element.inner_text()
+            
+            # Only yield if we have essential data
+            if item.get('name') and item.get('consultation_fee'):
+                yield item
+            else:
+                self.logger.warning(f"Skipping incomplete profile: {response.url}")
+                
+        except Exception as e:
+            self.logger.error(f"Error parsing doctor profile {response.url}: {str(e)}")
+        
+        finally:
+            await page.close()
+    
+    def handle_error(self, failure):
+        """Handle request errors"""
+        self.logger.error(f"Request failed: {failure.request.url} - {failure.value}")
+        
+    def closed(self, reason):
+        """Called when spider is closed"""
+        self.logger.info(f"Spider closed: {reason}")
