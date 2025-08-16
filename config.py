@@ -10,7 +10,13 @@ SPECIALITIES = [
     'Dietitian/Nutritionist', 'Gastroenterologist', 'bariatric surgeon', 
     'Gynecologist', 'Infertility Specialist', 'Neurologist', 'Neurosurgeon', 
     'Ophthalmologist', 'Orthopedist', 'Pediatrician', 'Physiotherapist', 
-    'Psychiatrist', 'Pulmonologist', 'Rheumatologist', 'Urologist'
+    'Psychiatrist', 'Pulmonologist', 'Rheumatologist', 'Urologist',
+    # Additional specialities to improve coverage
+    'General Physician', 'ENT Specialist', 'Radiologist', 'Pathologist',
+    'Anesthesiologist', 'Emergency Medicine Physician', 'Geriatrician',
+    'Plastic Surgeon', 'Vascular Surgeon', 'Thoracic Surgeon',
+    'Endocrinologist', 'Nephrologist', 'Oncologist', 'Homeopath',
+    'Ayurveda', 'Unani', 'Sexologist', 'Cosmetologist'
 ]
 
 # Output configuration
@@ -19,7 +25,8 @@ CSV_FILENAME = 'doctors_data.csv'
 
 # Scraping delays and limits
 REQUEST_DELAY = 2
-MAX_DOCTORS_PER_SPECIALITY = 50  # Limit for testing
+MAX_DOCTORS_PER_SPECIALITY = None  # Remove limit to capture all doctors
+MAX_PAGES_PER_SPECIALITY = 50  # Limit pages to prevent infinite loops
 
 # Browser configuration for Playwright
 BROWSER_CONFIG = {

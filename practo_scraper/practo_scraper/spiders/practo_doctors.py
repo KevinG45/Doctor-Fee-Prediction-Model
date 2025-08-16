@@ -3,6 +3,23 @@ from scrapy_playwright.page import PageMethod
 from urllib.parse import urlencode
 import time
 from practo_scraper.items import DoctorItem
+import sys
+import os
+
+# Add parent directory to path to import config
+sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__)))))
+try:
+    from config import CITIES, SPECIALITIES
+except ImportError:
+    # Fallback if config import fails
+    CITIES = ['Bangalore', 'Delhi', 'Mumbai']
+    SPECIALITIES = [
+        'Cardiologist', 'Chiropractor', 'Dentist', 'Dermatologist', 
+        'Dietitian/Nutritionist', 'Gastroenterologist', 'bariatric surgeon', 
+        'Gynecologist', 'Infertility Specialist', 'Neurologist', 'Neurosurgeon', 
+        'Ophthalmologist', 'Orthopedist', 'Pediatrician', 'Physiotherapist', 
+        'Psychiatrist', 'Pulmonologist', 'Rheumatologist', 'Urologist'
+    ]
 
 
 class PractoDoctorsSpider(scrapy.Spider):
@@ -10,14 +27,8 @@ class PractoDoctorsSpider(scrapy.Spider):
     allowed_domains = ["practo.com"]
     
     # Configuration
-    cities = ['Bangalore', 'Delhi', 'Mumbai']
-    specialities = [
-        'Cardiologist', 'Chiropractor', 'Dentist', 'Dermatologist', 
-        'Dietitian/Nutritionist', 'Gastroenterologist', 'bariatric surgeon', 
-        'Gynecologist', 'Infertility Specialist', 'Neurologist', 'Neurosurgeon', 
-        'Ophthalmologist', 'Orthopedist', 'Pediatrician', 'Physiotherapist', 
-        'Psychiatrist', 'Pulmonologist', 'Rheumatologist', 'Urologist'
-    ]
+    cities = CITIES
+    specialities = SPECIALITIES
     
     def start_requests(self):
         """Generate initial requests for all city-speciality combinations"""
@@ -89,23 +100,44 @@ class PractoDoctorsSpider(scrapy.Spider):
             await page.close()
     
     async def scroll_to_load_all(self, page):
-        """Scroll to load all doctors on the page"""
+        """Scroll to load all doctors on the page with enhanced loading"""
         try:
+            scroll_attempts = 0
+            max_scroll_attempts = 20  # Increase max attempts
+            consecutive_same_height = 0
+            
             previous_height = await page.evaluate("document.body.scrollHeight")
             
-            while True:
+            while scroll_attempts < max_scroll_attempts:
                 # Scroll to bottom
                 await page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
-                await page.wait_for_timeout(2000)
+                await page.wait_for_timeout(3000)  # Increased wait time
+                
+                # Try clicking "Load More" button if it exists
+                try:
+                    load_more_button = await page.query_selector('button[data-qa-id="load_more_doctors"], .load-more-button, .load-more')
+                    if load_more_button:
+                        await load_more_button.click()
+                        await page.wait_for_timeout(2000)
+                        self.logger.info("Clicked 'Load More' button")
+                except Exception:
+                    pass  # Button might not exist or be clickable
                 
                 # Get new height
                 new_height = await page.evaluate("document.body.scrollHeight")
                 
-                # Break if no more content to load
+                # Check if height changed
                 if new_height == previous_height:
-                    break
+                    consecutive_same_height += 1
+                    if consecutive_same_height >= 3:  # Stop after 3 consecutive same heights
+                        break
+                else:
+                    consecutive_same_height = 0
                     
                 previous_height = new_height
+                scroll_attempts += 1
+                
+                self.logger.debug(f"Scroll attempt {scroll_attempts}, height: {new_height}")
                 
         except Exception as e:
             self.logger.warning(f"Error during scrolling: {str(e)}")
