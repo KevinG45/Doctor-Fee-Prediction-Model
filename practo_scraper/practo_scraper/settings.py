@@ -110,7 +110,7 @@ FEEDS = {
         "format": "csv",
         "encoding": "utf8",
         "store_empty": False,
-        "fields": ["name", "speciality", "degree", "year_of_experience", "location", "city", "dp_score", "npv", "consultation_fee"],
+        "fields": ["name", "speciality", "degree", "year_of_experience", "location", "city", "dp_score", "npv", "consultation_fee", "profile_url", "scraped_at", "google_map_link"],
     },
 }
 
