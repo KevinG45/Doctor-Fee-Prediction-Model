@@ -182,6 +182,14 @@ class PractoDoctorsSpider(scrapy.Spider):
             score_element = await page.query_selector('span.u-green-text.u-bold.u-large-font')
             if score_element:
                 item['dp_score'] = await score_element.inner_text()
+                # Google Map link (iframe or anchor)
+                map_iframe = await page.query_selector('iframe[src*="google.com/maps"]')
+                if map_iframe:
+                    item['google_map_link'] = await map_iframe.get_attribute('src')
+                else:
+                    map_anchor = await page.query_selector('a[href*="google.com/maps"]')
+                    if map_anchor:
+                        item['google_map_link'] = await map_anchor.get_attribute('href')
             
             # Number of patient votes
             votes_element = await page.query_selector('span.u-smallest-font.u-grey_3-text')

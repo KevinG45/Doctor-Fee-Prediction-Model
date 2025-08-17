@@ -29,3 +29,5 @@ class DoctorItem(scrapy.Item):
     # Additional fields for data quality
     scraped_at = scrapy.Field()
     profile_url = scrapy.Field()
+    # Direct Google Map link from Practo page
+    google_map_link = scrapy.Field()
