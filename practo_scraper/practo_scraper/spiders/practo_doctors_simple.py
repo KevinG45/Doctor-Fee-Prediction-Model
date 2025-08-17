@@ -27,7 +27,7 @@ class PractoDoctorsSimpleSpider(scrapy.Spider):
     
     # Focus on Bangalore as requested
     city = "Bangalore"
-    specialities = SPECIALITIES[:5]  # Start with first 5 specialities for testing
+    specialities = SPECIALITIES  # Use all specialities instead of limiting to 5
     
     custom_settings = {
         'CONCURRENT_REQUESTS': 2,

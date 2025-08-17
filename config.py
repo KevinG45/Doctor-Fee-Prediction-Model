@@ -3,7 +3,8 @@ Configuration file for Practo scraper
 """
 
 # Scraping configuration
-CITIES = ['Bangalore', 'Delhi', 'Mumbai']
+# Focus on Bangalore as requested in the issue
+CITIES = ['Bangalore']  # Changed from multiple cities to focus on Bangalore only
 
 SPECIALITIES = [
     'Cardiologist', 'Chiropractor', 'Dentist', 'Dermatologist', 
