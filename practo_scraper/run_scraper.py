@@ -21,8 +21,8 @@ def run_spider():
     # Create crawler process
     process = CrawlerProcess(settings)
     
-    # Add the spider to the process
-    process.crawl('practo_doctors')
+    # Add the spider to the process (use simple spider that works without playwright)
+    process.crawl('practo_doctors_simple')
     
     # Start the crawling process
     process.start()

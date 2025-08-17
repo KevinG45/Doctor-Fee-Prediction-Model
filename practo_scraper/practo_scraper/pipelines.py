@@ -204,3 +204,83 @@ class CsvExportPipeline:
 
 
 from scrapy.exceptions import DropItem
+import sqlite3
+import os
+
+
+class DatabasePipeline:
+    """Pipeline to save data to SQLite database"""
+    
+    def __init__(self):
+        self.db_path = 'data/doctors_database.db'
+        
+    def open_spider(self, spider):
+        # Create data directory if it doesn't exist
+        os.makedirs('data', exist_ok=True)
+        
+        # Connect to database
+        self.connection = sqlite3.connect(self.db_path)
+        self.cursor = self.connection.cursor()
+        
+        # Create table if it doesn't exist
+        self.cursor.execute('''
+            CREATE TABLE IF NOT EXISTS doctors (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT,
+                speciality TEXT,
+                degree TEXT,
+                year_of_experience TEXT,
+                location TEXT,
+                city TEXT,
+                dp_score TEXT,
+                npv TEXT,
+                consultation_fee TEXT,
+                profile_url TEXT UNIQUE,
+                google_map_link TEXT,
+                scraped_at TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        
+        self.connection.commit()
+        spider.logger.info(f"Database initialized: {self.db_path}")
+    
+    def close_spider(self, spider):
+        # Get count of records
+        self.cursor.execute("SELECT COUNT(*) FROM doctors")
+        count = self.cursor.fetchone()[0]
+        
+        self.connection.close()
+        spider.logger.info(f"Database closed. Total records: {count}")
+    
+    def process_item(self, item, spider):
+        adapter = ItemAdapter(item)
+        
+        try:
+            # Insert or replace record (avoid duplicates based on profile_url)
+            self.cursor.execute('''
+                INSERT OR REPLACE INTO doctors (
+                    name, speciality, degree, year_of_experience, location, city,
+                    dp_score, npv, consultation_fee, profile_url, google_map_link, scraped_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ''', (
+                adapter.get('name', ''),
+                adapter.get('speciality', ''),
+                adapter.get('degree', ''),
+                adapter.get('year_of_experience', ''),
+                adapter.get('location', ''),
+                adapter.get('city', ''),
+                adapter.get('dp_score', ''),
+                adapter.get('npv', ''),
+                adapter.get('consultation_fee', ''),
+                adapter.get('profile_url', ''),
+                adapter.get('google_map_link', ''),
+                adapter.get('scraped_at', '')
+            ))
+            
+            self.connection.commit()
+            
+        except sqlite3.Error as e:
+            spider.logger.error(f"Database error: {e}")
+            
+        return item
