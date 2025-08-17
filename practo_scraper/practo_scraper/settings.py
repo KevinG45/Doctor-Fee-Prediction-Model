@@ -49,16 +49,16 @@ SPIDER_MIDDLEWARES = {
 # Enable or disable downloader middlewares
 # See https://docs.scrapy.org/en/latest/topics/downloader-middleware.html
 DOWNLOADER_MIDDLEWARES = {
-    # "scrapy_playwright.middleware.ScrapyPlaywrightDownloadMiddleware": 585,
+    "scrapy_playwright.middleware.ScrapyPlaywrightDownloadMiddleware": 585,
     "practo_scraper.middlewares.PractoScraperDownloaderMiddleware": 543,
 }
 
-# Configure Playwright (disabled for now due to installation issues)
-# PLAYWRIGHT_BROWSER_TYPE = "chromium"
-# PLAYWRIGHT_LAUNCH_OPTIONS = {
-#     "headless": True,
-#     "timeout": 30000,
-# }
+# Configure Playwright
+PLAYWRIGHT_BROWSER_TYPE = "chromium"
+PLAYWRIGHT_LAUNCH_OPTIONS = {
+    "headless": True,
+    "timeout": 30000,
+}
 
 # Enable or disable extensions
 # See https://docs.scrapy.org/en/latest/topics/extensions.html
