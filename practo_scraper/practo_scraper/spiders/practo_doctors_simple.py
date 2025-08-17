@@ -29,6 +29,10 @@ class PractoDoctorsSimpleSpider(scrapy.Spider):
     city = "Bangalore"
     specialities = SPECIALITIES  # Use all specialities instead of limiting to 5
     
+    # Add counters for tracking
+    total_doctors_found = 0
+    total_specialities_processed = 0
+    
     custom_settings = {
         'CONCURRENT_REQUESTS': 2,
         'DOWNLOAD_DELAY': 3,
@@ -45,7 +49,7 @@ class PractoDoctorsSimpleSpider(scrapy.Spider):
             # Alternative URL format 
             alt_url = f"https://www.practo.com/bangalore/{speciality.lower().replace(' ', '-').replace('/', '-')}"
             
-            # Try both URL formats
+            # Try both URL formats to maximize coverage
             for search_url in [url, alt_url]:
                 yield scrapy.Request(
                     url=search_url,
@@ -65,15 +69,15 @@ class PractoDoctorsSimpleSpider(scrapy.Spider):
                         'Upgrade-Insecure-Requests': '1',
                     }
                 )
-                break  # Try only the first URL for now
     
     def parse_doctors_listing(self, response):
         """Parse the doctors listing page and extract doctor profile URLs"""
         
         city = response.meta['city']
         speciality = response.meta['speciality']
+        page_number = response.meta.get('page_number', 1)
         
-        self.logger.info(f"Parsing {speciality} doctors in {city} from {response.url}")
+        self.logger.info(f"Parsing {speciality} doctors in {city} from {response.url} (page {page_number})")
         
         # Try multiple selectors for doctor profiles
         doctor_selectors = [
@@ -97,7 +101,8 @@ class PractoDoctorsSimpleSpider(scrapy.Spider):
         # Remove duplicates
         doctor_links = list(set(doctor_links))
         
-        self.logger.info(f"Found {len(doctor_links)} unique doctors for {speciality} in {city}")
+        self.logger.info(f"Found {len(doctor_links)} unique doctors for {speciality} in {city} (page {page_number})")
+        self.total_doctors_found += len(doctor_links)
         
         # If no doctors found, try to extract from JavaScript or JSON data
         if not doctor_links:
@@ -113,7 +118,7 @@ class PractoDoctorsSimpleSpider(scrapy.Spider):
                         break
         
         # Process doctor links
-        for href in doctor_links[:20]:  # Limit to first 20 doctors for testing
+        for href in doctor_links:  # Process all doctors found (removed artificial limit)
             if href:
                 profile_url = response.urljoin(href)
                 
@@ -131,30 +136,59 @@ class PractoDoctorsSimpleSpider(scrapy.Spider):
                 )
         
         # Try to find pagination or "load more" functionality
-        next_page_selectors = [
-            'a.next-page',
-            'a[aria-label="Next"]',
-            'button[data-qa-id="load_more_doctors"]',
-            '.pagination .next a',
-            'a:contains("Next")',
-            '.load-more-btn',
-        ]
+        page_number = response.meta.get('page_number', 1)
+        max_pages = 20  # Limit to prevent infinite loops
         
-        for selector in next_page_selectors:
-            next_page = response.css(selector + '::attr(href)').get()
-            if next_page:
+        if page_number < max_pages:
+            next_page_selectors = [
+                'a.next-page',
+                'a[aria-label="Next"]',
+                'button[data-qa-id="load_more_doctors"]',
+                '.pagination .next a',
+                'a:contains("Next")',
+                '.load-more-btn',
+                f'a[href*="page={page_number + 1}"]',  # Direct page number link
+            ]
+            
+            next_page_found = False
+            for selector in next_page_selectors:
+                next_page = response.css(selector + '::attr(href)').get()
+                if next_page:
+                    self.logger.info(f"Found next page for {speciality} in {city}: page {page_number + 1}")
+                    yield scrapy.Request(
+                        url=response.urljoin(next_page),
+                        meta={
+                            "city": city,
+                            "speciality": speciality,
+                            "page_number": page_number + 1,
+                        },
+                        callback=self.parse_doctors_listing,
+                        headers={
+                            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                        }
+                    )
+                    next_page_found = True
+                    break
+            
+            # If no explicit next page found, try constructing page URLs
+            if not next_page_found and page_number == 1:
+                # Try common pagination patterns
+                base_url = response.url.split('?')[0]
+                next_page_url = f"{base_url}?page={page_number + 1}"
+                
                 yield scrapy.Request(
-                    url=response.urljoin(next_page),
+                    url=next_page_url,
                     meta={
                         "city": city,
                         "speciality": speciality,
+                        "page_number": page_number + 1,
                     },
                     callback=self.parse_doctors_listing,
                     headers={
                         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                    }
+                    },
+                    dont_filter=True  # Allow duplicate requests for pagination
                 )
-                break
     
     def parse_doctor_profile(self, response):
         """Parse individual doctor profile page"""
@@ -358,3 +392,5 @@ class PractoDoctorsSimpleSpider(scrapy.Spider):
     def closed(self, reason):
         """Called when spider is closed"""
         self.logger.info(f"Spider closed: {reason}")
+        self.logger.info(f"Total doctors found across all specialities: {self.total_doctors_found}")
+        self.logger.info(f"Total specialities processed: {self.total_specialities_processed}")
