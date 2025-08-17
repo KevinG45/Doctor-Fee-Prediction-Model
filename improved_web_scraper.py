@@ -8,9 +8,11 @@ import pandas as pd
 from bs4 import BeautifulSoup
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
+from webdriver_manager.chrome import ChromeDriverManager
 import time
 import logging
 import os
@@ -47,7 +49,11 @@ class ImprovedPractoScraper:
         chrome_options.add_argument("--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
         
         try:
-            driver = webdriver.Chrome(options=chrome_options)
+            # Use system ChromeDriver
+            service = Service('/usr/bin/chromedriver')
+            driver = webdriver.Chrome(service=service, options=chrome_options)
+            logger.info("Successfully initialized Chrome driver")
+            return driver
             return driver
         except Exception as e:
             logger.error(f"Failed to setup Chrome driver: {e}")
@@ -131,6 +137,7 @@ class ImprovedPractoScraper:
                 'dp_score': self.safe_extract_text(soup, 'span', 'u-green-text u-bold u-large-font'),
                 'npv': self.safe_extract_text(soup, 'span', 'u-smallest-font u-grey_3-text'),
                 'consultation_fee': self.extract_consultation_fee(soup),
+                'google_map_link': self.extract_google_map_link(soup),
                 'profile_url': profile_url,
                 'scraped_at': datetime.now().isoformat()
             }
@@ -154,23 +161,122 @@ class ImprovedPractoScraper:
                 driver.quit()
     
     def safe_extract_text(self, soup, tag, class_name):
-        """Safely extract text from soup element"""
+        """Safely extract text from soup element with multiple fallback selectors"""
+        # Try original selector first
         try:
             element = soup.find(tag, class_=class_name)
-            return element.text.strip() if element else ""
+            if element and element.text.strip():
+                return element.text.strip()
         except:
-            return ""
+            pass
+        
+        # For location field, try additional selectors
+        if 'location' in class_name.lower():
+            location_selectors = [
+                ('h4', 'c-profile--clinic__location'),  # Original
+                ('div', 'c-profile--clinic__location'),  # Without h4
+                ('span', None),  # Search all spans
+                ('div', None),   # Search all divs
+                ('p', None),     # Search all paragraphs
+            ]
+            
+            for sel_tag, sel_class in location_selectors:
+                try:
+                    if sel_class:
+                        element = soup.find(sel_tag, class_=sel_class)
+                    else:
+                        # Search all elements of this tag for location-related content
+                        elements = soup.find_all(sel_tag)
+                        for elem in elements:
+                            text = elem.text.strip()
+                            if text and any(keyword in text.lower() for keyword in ['bangalore', 'delhi', 'mumbai', 'road', 'area', 'nagar', 'cross']):
+                                if len(text) < 100:  # Reasonable length for location
+                                    return text
+                        continue
+                    
+                    if element and element.text.strip():
+                        return element.text.strip()
+                except:
+                    continue
+        
+        # For votes/npv field, try additional selectors
+        if 'grey_3-text' in class_name or 'votes' in class_name.lower():
+            votes_selectors = [
+                ('span', 'u-smallest-font u-grey_3-text'),  # Original
+                ('span', None),  # Search all spans
+                ('div', None),   # Search all divs
+            ]
+            
+            for sel_tag, sel_class in votes_selectors:
+                try:
+                    if sel_class:
+                        element = soup.find(sel_tag, class_=sel_class)
+                        if element and element.text.strip():
+                            return element.text.strip()
+                    else:
+                        # Search all elements for vote-related content
+                        elements = soup.find_all(sel_tag)
+                        for elem in elements:
+                            text = elem.text.strip()
+                            if text and any(keyword in text.lower() for keyword in ['votes', 'reviews', 'patients', 'feedback']):
+                                if any(char.isdigit() for char in text):
+                                    return text
+                except:
+                    continue
+        
+        return ""
     
     def extract_experience(self, soup):
-        """Extract years of experience"""
+        """Extract years of experience with multiple fallback selectors"""
+        experience_selectors = [
+            ('div', 'c-profile__details'),  # Original approach
+            ('*', '*[class*="experience"]'),  # Any element with experience in class
+            ('*', '*[class*="years"]'),  # Any element with years in class
+            ('span', None),  # All spans to search for text
+            ('div', None),  # All divs to search for text
+            ('h2', None),  # All h2 to search for text
+        ]
+        
+        # Try specific CSS selectors first
         try:
             elements = soup.find('div', class_='c-profile__details')
             if elements:
                 h2_elements = elements.find_all('h2')
                 if h2_elements:
-                    return h2_elements[-1].text.strip()
+                    text = h2_elements[-1].text.strip()
+                    if text and ("years" in text.lower() or "experience" in text.lower()):
+                        return text
         except:
             pass
+        
+        # Try alternative selectors
+        for tag, class_attr in experience_selectors:
+            try:
+                if class_attr and class_attr.startswith('*['):
+                    # Skip complex selectors for BeautifulSoup
+                    continue
+                    
+                elements = soup.find_all(tag, class_=class_attr) if class_attr else soup.find_all(tag)
+                for elem in elements:
+                    text = elem.text.strip()
+                    if text and ("years" in text.lower() or "experience" in text.lower()):
+                        # Check if it contains a number
+                        if any(char.isdigit() for char in text):
+                            return text
+            except:
+                continue
+        
+        # Text-based search as last resort
+        try:
+            all_text_elements = soup.find_all(text=True)
+            for text in all_text_elements:
+                text = str(text).strip()
+                if text and ("years" in text.lower() or "experience" in text.lower()):
+                    if any(char.isdigit() for char in text) and len(text) < 50:  # Reasonable length
+                        return text
+        except:
+            pass
+            
         return ""
     
     def extract_consultation_fee(self, soup):
@@ -188,6 +294,57 @@ class ImprovedPractoScraper:
                 
         except:
             pass
+        return ""
+    
+    def extract_google_map_link(self, soup):
+        """Extract Google Maps link with multiple fallback selectors"""
+        google_map_link = ""
+        
+        # Try iframe with Google Maps source
+        try:
+            iframe = soup.find('iframe', src=lambda x: x and 'google.com/maps' in x)
+            if iframe:
+                return iframe.get('src', '')
+        except:
+            pass
+        
+        # Try anchor link to Google Maps
+        try:
+            anchor = soup.find('a', href=lambda x: x and 'google.com/maps' in x)
+            if anchor:
+                return anchor.get('href', '')
+        except:
+            pass
+        
+        # Try alternative Google Maps patterns
+        try:
+            iframe = soup.find('iframe', src=lambda x: x and 'maps.google' in x)
+            if iframe:
+                return iframe.get('src', '')
+        except:
+            pass
+        
+        # Try data attributes
+        try:
+            for attr in ['data-src', 'data-href']:
+                element = soup.find(attrs={attr: lambda x: x and 'google.com/maps' in x}) if soup.find(attrs={attr: True}) else None
+                if element:
+                    return element.get(attr, '')
+        except:
+            pass
+        
+        # Look for elements with coordinates in data attributes
+        try:
+            lat_elem = soup.find(attrs={'data-lat': True})
+            lng_elem = soup.find(attrs={'data-lng': True})
+            if lat_elem and lng_elem:
+                lat = lat_elem.get('data-lat')
+                lng = lng_elem.get('data-lng')
+                if lat and lng:
+                    return f"https://www.google.com/maps?q={lat},{lng}"
+        except:
+            pass
+        
         return ""
     
     def clean_data(self, data):
