@@ -49,9 +49,14 @@ SPIDER_MIDDLEWARES = {
 # Enable or disable downloader middlewares
 # See https://docs.scrapy.org/en/latest/topics/downloader-middleware.html
 DOWNLOADER_MIDDLEWARES = {
-    "scrapy_playwright.middleware.ScrapyPlaywrightDownloadMiddleware": 585,
     "practo_scraper.middlewares.PractoScraperDownloaderMiddleware": 543,
 }
+
+# Configure Playwright Download Handler (commented out for fallback)
+# DOWNLOAD_HANDLERS = {
+#     "http": "scrapy_playwright.handler.ScrapyPlaywrightDownloadHandler",
+#     "https": "scrapy_playwright.handler.ScrapyPlaywrightDownloadHandler",
+# }
 
 # Configure Playwright
 PLAYWRIGHT_BROWSER_TYPE = "chromium"
@@ -72,6 +77,7 @@ ITEM_PIPELINES = {
     "practo_scraper.pipelines.ValidationPipeline": 300,
     "practo_scraper.pipelines.CleaningPipeline": 400,
     "practo_scraper.pipelines.CsvExportPipeline": 500,
+    "practo_scraper.pipelines.DatabasePipeline": 600,
 }
 
 # Enable and configure the AutoThrottle extension (disabled by default)
