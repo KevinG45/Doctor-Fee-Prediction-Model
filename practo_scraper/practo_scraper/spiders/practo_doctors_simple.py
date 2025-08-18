@@ -278,9 +278,16 @@ class PractoDoctorsSimpleSpider(scrapy.Spider):
         # If no specific location found, try to extract from address-like text
         if not location:
             for text in all_text:
-                if text and (any(word in text.lower() for word in ['road', 'street', 'bangalore', 'bengaluru', 'area', 'nagar'])):
-                    location = text.strip()[:100]  # Limit length
-                    break
+                if text and text.strip():
+                    text_clean = text.strip()
+                    # Only consider text that looks like real location names
+                    if (any(word in text_clean.lower() for word in ['road', 'street', 'bangalore', 'bengaluru', 'area', 'nagar', 'block', 'cross', 'layout', 'colony']) 
+                        and len(text_clean) < 100  # Reasonable length
+                        and not re.match(r'^[a-z,]+$', text_clean)  # Not just comma-separated lowercase words
+                        and text_clean.count(',') <= 3  # Not too many commas
+                        and re.match(r'^[a-zA-Z0-9\s\-,.\(\)]+$', text_clean)):  # Only reasonable characters
+                        location = text_clean
+                        break
         
         item['location'] = location or ""
         

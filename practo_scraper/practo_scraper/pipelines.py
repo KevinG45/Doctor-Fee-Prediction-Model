@@ -49,9 +49,9 @@ class CleaningPipeline:
         if adapter.get('year_of_experience'):
             adapter['year_of_experience'] = self.extract_experience_years(adapter['year_of_experience'])
         
-        # Clean location
+        # Clean location and filter garbage values
         if adapter.get('location'):
-            adapter['location'] = self.clean_text(adapter['location'])
+            adapter['location'] = self.clean_location(adapter['location'])
         
         # Clean and convert dp_score to float
         if adapter.get('dp_score'):
@@ -77,6 +77,35 @@ class CleaningPipeline:
         # Remove extra whitespace and newlines
         text = re.sub(r'\s+', ' ', str(text)).strip()
         return text
+    
+    def clean_location(self, location_text):
+        """Clean location text and filter out garbage HTML tag values"""
+        if not location_text:
+            return ""
+        
+        # First apply basic text cleaning
+        location = self.clean_text(location_text)
+        
+        # Pattern to detect garbage HTML tag sequences
+        # Matches strings that are comma-separated single words (likely HTML tags)
+        html_tag_pattern = r'^[a-z,]+$|^a,abbr,acronym|[a-z]+,[a-z]+,[a-z]+'
+        
+        # Check if the location looks like HTML tag garbage
+        if re.match(html_tag_pattern, location):
+            return ""  # Return empty string for garbage values
+        
+        # Additional checks for invalid location patterns
+        if len(location) > 100:  # Suspiciously long location
+            return ""
+        
+        if location.count(',') > 5:  # Too many commas suggest garbage
+            return ""
+        
+        # Only allow reasonable characters in location (letters, numbers, spaces, common punctuation)
+        if not re.match(r'^[a-zA-Z0-9\s\-,.\(\)]+$', location):
+            return ""
+        
+        return location
     
     def extract_main_degree(self, degree_text):
         """Extract the main degree from degree text"""
