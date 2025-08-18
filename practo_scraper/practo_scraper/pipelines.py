@@ -49,9 +49,17 @@ class CleaningPipeline:
         if adapter.get('year_of_experience'):
             adapter['year_of_experience'] = self.extract_experience_years(adapter['year_of_experience'])
         
-        # Clean location
+        # Clean and validate location
         if adapter.get('location'):
-            adapter['location'] = self.clean_text(adapter['location'])
+            cleaned_location = self.clean_text(adapter['location'])
+            if self.is_valid_location(cleaned_location):
+                adapter['location'] = cleaned_location
+            else:
+                # If location is garbage, try to extract from google_map_link or fall back to city
+                adapter['location'] = self.recover_location_from_map_link(
+                    adapter.get('google_map_link'), 
+                    adapter.get('city', '')
+                )
         
         # Clean and convert dp_score to float
         if adapter.get('dp_score'):
@@ -169,6 +177,57 @@ class CleaningPipeline:
             return int(match.group(1))
         
         return 0
+    
+    def is_valid_location(self, location):
+        """Check if a location is valid and not HTML garbage"""
+        if not location or not location.strip():
+            return False
+        
+        location = location.strip()
+        
+        # Check for HTML tag patterns (common garbage)
+        html_patterns = [
+            r'^a,abbr,acronym,address,applet,article',  # Common garbage pattern
+            r'[a-z]+,[a-z]+,[a-z]+,[a-z]+',  # Multiple comma-separated lowercase words
+            r'^(a|abbr|acronym|address|applet|article|aside|audio|b|big|blockquote)$',  # Single HTML tags
+        ]
+        
+        for pattern in html_patterns:
+            if re.search(pattern, location, re.IGNORECASE):
+                return False
+        
+        # Check if it's suspiciously long (garbage data tends to be very long)
+        if len(location) > 200:
+            return False
+            
+        # Check if it contains too many commas (likely tag list)
+        if location.count(',') > 5:
+            return False
+        
+        # Check if it looks like HTML tags
+        if '<' in location or '>' in location:
+            return False
+        
+        return True
+    
+    def recover_location_from_map_link(self, map_link, city):
+        """Try to recover location information from Google Maps link"""
+        if not map_link:
+            return city or "Location Unknown"
+        
+        # Extract coordinates from map link
+        coord_pattern = r'maps/place/(-?\d+\.?\d*),(-?\d+\.?\d*)'
+        match = re.search(coord_pattern, str(map_link))
+        if match:
+            try:
+                lat, lng = float(match.group(1)), float(match.group(2))
+                # For now, just return city with coordinates info
+                return f"{city} ({lat:.3f}, {lng:.3f})"
+            except ValueError:
+                pass
+        
+        # If extraction fails, fall back to city
+        return city or "Location Unknown"
 
 
 class CsvExportPipeline:

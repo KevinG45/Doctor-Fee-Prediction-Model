@@ -2,6 +2,7 @@ import scrapy
 from scrapy_playwright.page import PageMethod
 from urllib.parse import urlencode
 import time
+import re
 from practo_scraper.items import DoctorItem
 import sys
 import os
@@ -210,30 +211,68 @@ class PractoDoctorsSpider(scrapy.Spider):
             
             item['year_of_experience'] = experience_text or ""
             
-            # Location - try multiple selectors  
+            # Location - try multiple selectors with validation
             location_text = None
             location_selectors = [
                 'h4.c-profile--clinic__location',  # Original selector
                 '.c-profile--clinic__location',  # Without h4
-                '*[class*="location"]',  # Any element with location in class
-                '*[class*="address"]',  # Any element with address in class
                 '.clinic-location',  # Common pattern
                 '.doctor-location',  # Direct naming
                 '.profile-location',  # Profile pattern
                 'div[data-qa*="location"]',  # Data attribute
                 '.practice-location',  # Practice pattern
-                '.hospital-address'  # Hospital pattern
+                '.hospital-address',  # Hospital pattern
+                '.address-text',  # Address text
+                '.clinic-address',  # Clinic address
+                'span[class*="location"]:not([class*="html"])',  # Specific location spans, excluding HTML elements
+                'div[class*="address"]:not([class*="html"])',  # Specific address divs, excluding HTML elements
             ]
+            
+            def is_valid_location(text):
+                """Check if extracted text is a valid location and not HTML garbage"""
+                if not text or not text.strip():
+                    return False
+                
+                text = text.strip()
+                
+                # Check for HTML tag patterns (common garbage)
+                html_patterns = [
+                    r'^a,abbr,acronym,address,applet,article',  # Common garbage pattern
+                    r'[a-z]+,[a-z]+,[a-z]+,[a-z]+',  # Multiple comma-separated lowercase words
+                    r'^(a|abbr|acronym|address|applet|article|aside|audio|b|big|blockquote)$',  # Single HTML tags
+                ]
+                
+                for pattern in html_patterns:
+                    if re.search(pattern, text, re.IGNORECASE):
+                        return False
+                
+                # Check if it's suspiciously long (garbage data tends to be very long)
+                if len(text) > 200:
+                    return False
+                    
+                # Check if it contains too many commas (likely tag list)
+                if text.count(',') > 5:
+                    return False
+                
+                # Check if it looks like HTML tags
+                if '<' in text or '>' in text:
+                    return False
+                
+                return True
             
             for selector in location_selectors:
                 try:
                     element = await page.query_selector(selector)
                     if element:
                         text = await element.inner_text()
-                        if text and text.strip():
+                        if is_valid_location(text):
                             location_text = text.strip()
+                            self.logger.debug(f"Found valid location with selector '{selector}': {location_text}")
                             break
-                except Exception:
+                        else:
+                            self.logger.debug(f"Invalid location found with selector '{selector}': {text}")
+                except Exception as e:
+                    self.logger.debug(f"Error with location selector '{selector}': {e}")
                     continue
             
             item['location'] = location_text or ""
