@@ -98,7 +98,9 @@ class PractoDoctorsSpider(scrapy.Spider):
             self.logger.error(f"Error parsing doctors listing for {speciality} in {city}: {str(e)}")
         
         finally:
-            await page.close()
+            # Don't manually close the page - scrapy-playwright handles this automatically
+            # Manual page.close() can cause event loop conflicts between Scrapy (Twisted) and Playwright (asyncio)
+            pass
     
     async def scroll_to_load_all(self, page):
         """Scroll to load all doctors on the page with enhanced loading"""
@@ -460,7 +462,9 @@ class PractoDoctorsSpider(scrapy.Spider):
             self.logger.error(f"Error parsing doctor profile {response.url}: {str(e)}")
         
         finally:
-            await page.close()
+            # Don't manually close the page - scrapy-playwright handles this automatically
+            # Manual page.close() can cause event loop conflicts between Scrapy (Twisted) and Playwright (asyncio)
+            pass
     
     def handle_error(self, failure):
         """Handle request errors"""
