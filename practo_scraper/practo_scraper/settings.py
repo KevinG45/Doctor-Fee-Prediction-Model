@@ -52,11 +52,11 @@ DOWNLOADER_MIDDLEWARES = {
     "practo_scraper.middlewares.PractoScraperDownloaderMiddleware": 543,
 }
 
-# Configure Playwright Download Handler (commented out for fallback)
-# DOWNLOAD_HANDLERS = {
-#     "http": "scrapy_playwright.handler.ScrapyPlaywrightDownloadHandler",
-#     "https": "scrapy_playwright.handler.ScrapyPlaywrightDownloadHandler",
-# }
+# Configure Playwright Download Handler
+DOWNLOAD_HANDLERS = {
+    "http": "scrapy_playwright.handler.ScrapyPlaywrightDownloadHandler",
+    "https": "scrapy_playwright.handler.ScrapyPlaywrightDownloadHandler",
+}
 
 # Configure Playwright
 PLAYWRIGHT_BROWSER_TYPE = "chromium"
@@ -74,6 +74,7 @@ PLAYWRIGHT_LAUNCH_OPTIONS = {
 # Configure item pipelines
 # See https://docs.scrapy.org/en/latest/topics/item-pipeline.html
 ITEM_PIPELINES = {
+    "practo_scraper.pipelines.DeduplicationPipeline": 200,
     "practo_scraper.pipelines.ValidationPipeline": 300,
     "practo_scraper.pipelines.CleaningPipeline": 400,
     "practo_scraper.pipelines.CsvExportPipeline": 500,

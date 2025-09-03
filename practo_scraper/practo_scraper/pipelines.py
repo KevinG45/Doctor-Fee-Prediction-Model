@@ -18,13 +18,20 @@ class ValidationPipeline:
     def process_item(self, item, spider):
         adapter = ItemAdapter(item)
         
-        # Skip if name is missing (essential field)
-        if not adapter.get('name'):
+        # Skip only if name is missing (essential field)
+        if not adapter.get('name') or not adapter.get('name').strip():
             raise DropItem(f"Missing name in {item}")
             
-        # Skip if consultation fee is missing
+        # Skip if profile_url is missing (prevents duplicates and identifies unique doctors)
+        if not adapter.get('profile_url'):
+            raise DropItem(f"Missing profile_url in {item}")
+            
+        # Don't drop items just because consultation fee is missing - that's what we're trying to fix
+        # Instead, set a default value or flag for missing fees
         if not adapter.get('consultation_fee'):
-            raise DropItem(f"Missing consultation fee in {item}")
+            if hasattr(spider, 'logger') and spider.logger:
+                spider.logger.warning(f"Missing consultation fee for {adapter.get('name')} - keeping item anyway")
+            adapter['consultation_fee'] = ""  # Set empty string instead of dropping
             
         return item
 
@@ -115,18 +122,35 @@ class CleaningPipeline:
         if not experience_text:
             return 0
         
-        # Look for patterns like "5 years", "10+ years", etc.
-        pattern = r'(\d+)(?:\+)?\s*(?:years?|yrs?)'
-        match = re.search(pattern, str(experience_text), re.IGNORECASE)
+        exp_str = str(experience_text).strip()
         
-        if match:
-            return int(match.group(1))
+        # Look for clear experience patterns first
+        experience_patterns = [
+            r'(\d+)(?:\+)?\s*(?:years?|yrs?)\s*(?:of\s*)?(?:experience|exp)',  # "5 years of experience"
+            r'(?:experience|exp)[\s:]*(\d+)(?:\+)?\s*(?:years?|yrs?)',  # "experience: 5 years"
+            r'(\d+)(?:\+)?\s*(?:years?|yrs?)',  # "5 years" (more general)
+        ]
         
-        # Look for just numbers
-        pattern = r'(\d+)'
-        match = re.search(pattern, str(experience_text))
-        if match:
-            return int(match.group(1))
+        for pattern in experience_patterns:
+            match = re.search(pattern, exp_str, re.IGNORECASE)
+            if match:
+                years = int(match.group(1))
+                # Reasonable experience range (0-60 years)
+                if 0 <= years <= 60:
+                    return years
+        
+        # If no explicit experience pattern, look for standalone numbers
+        # but be more cautious about what qualifies as experience
+        if re.search(r'\b(?:experience|exp|years?|yrs?)\b', exp_str, re.IGNORECASE):
+            numbers = re.findall(r'\d+', exp_str)
+            for num_str in numbers:
+                try:
+                    num = int(num_str)
+                    # Must be reasonable experience range and not a year
+                    if 0 <= num <= 60 and not (1900 <= num <= 2024):
+                        return num
+                except ValueError:
+                    continue
         
         return 0
     
@@ -166,15 +190,44 @@ class CleaningPipeline:
         if not fee_text:
             return 0
         
-        # Remove currency symbols and extract number
-        # Handle patterns like "₹500", "500", "₹1,000", etc.
-        cleaned = re.sub(r'[₹$,\s]', '', str(fee_text))
+        fee_str = str(fee_text).strip()
         
-        pattern = r'(\d+)'
-        match = re.search(pattern, cleaned)
+        # First check if this looks like a year (common confusion with experience)
+        if re.match(r'^(19|20)\d{2}$', fee_str):
+            # This is likely a year, not a fee
+            return 0
         
-        if match:
-            return int(match.group(1))
+        # Check for common fee patterns
+        fee_patterns = [
+            r'[₹$]\s*([0-9,]+)',  # ₹500 or $500 format
+            r'([0-9,]+)\s*[₹$]',  # 500₹ format
+            r'([0-9,]+)\s*(?:rupees?|rs\.?)',  # 500 rupees format
+            r'(?:fee|cost|price)[\s:]*[₹$]?\s*([0-9,]+)',  # fee: 500 format
+            r'consultation[\s:]*[₹$]?\s*([0-9,]+)',  # consultation: 500 format
+        ]
+        
+        for pattern in fee_patterns:
+            match = re.search(pattern, fee_str, re.IGNORECASE)
+            if match:
+                fee_num_str = match.group(1).replace(',', '')
+                try:
+                    fee_amount = int(fee_num_str)
+                    # Reasonable fee range validation (₹50 to ₹10,000)
+                    if 50 <= fee_amount <= 10000:
+                        return fee_amount
+                except ValueError:
+                    continue
+        
+        # Fallback: extract any number that looks like a fee
+        numbers = re.findall(r'\d+', fee_str)
+        for num_str in numbers:
+            try:
+                num = int(num_str)
+                # Must be in reasonable fee range and not look like a year
+                if 50 <= num <= 10000 and not (1900 <= num <= 2024):
+                    return num
+            except ValueError:
+                continue
         
         return 0
     
@@ -265,6 +318,37 @@ class CsvExportPipeline:
 from scrapy.exceptions import DropItem
 import sqlite3
 import os
+
+
+class DeduplicationPipeline:
+    """Pipeline to prevent duplicate doctors based on name and profile URL"""
+    
+    def __init__(self):
+        self.seen_urls = set()
+        self.seen_names_cities = set()  # Track name+city combinations
+        
+    def process_item(self, item, spider):
+        adapter = ItemAdapter(item)
+        
+        profile_url = adapter.get('profile_url', '')
+        name = adapter.get('name', '').strip().lower()
+        city = adapter.get('city', '').strip().lower()
+        
+        # Check URL-based duplicates (most reliable)
+        if profile_url in self.seen_urls:
+            raise DropItem(f"Duplicate URL found: {profile_url}")
+        
+        # Check name+city combination for additional deduplication
+        name_city_key = f"{name}|{city}"
+        if name_city_key in self.seen_names_cities:
+            spider.logger.warning(f"Potential duplicate doctor found: {name} in {city}")
+            # Don't drop, but log for review
+        
+        # Add to seen sets
+        self.seen_urls.add(profile_url)
+        self.seen_names_cities.add(name_city_key)
+        
+        return item
 
 
 class DatabasePipeline:

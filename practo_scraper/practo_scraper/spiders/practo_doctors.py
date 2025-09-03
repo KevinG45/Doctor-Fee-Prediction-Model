@@ -375,21 +375,86 @@ class PractoDoctorsSpider(scrapy.Spider):
             
             item['npv'] = votes_text or "0"
             
-            # Consultation fee
-            fee_element = await page.query_selector('span.u-strike')
-            if fee_element:
-                item['consultation_fee'] = await fee_element.inner_text()
-            else:
-                # Try alternative selector
-                fee_element = await page.query_selector('div.u-f-right.u-large-font.u-bold.u-valign--middle.u-lheight-normal')
-                if fee_element:
-                    item['consultation_fee'] = await fee_element.inner_text()
+            # Consultation fee - try multiple selectors with comprehensive fallbacks
+            consultation_fee = None
+            fee_selectors = [
+                'span.u-strike',  # Original strikethrough selector
+                'div.u-f-right.u-large-font.u-bold.u-valign--middle.u-lheight-normal',  # Original alternative
+                '*[class*="consultation-fee"]',  # Direct class naming
+                '*[class*="fee"]',  # Any element with fee in class
+                '*[class*="price"]',  # Any element with price in class
+                '*[class*="cost"]',  # Any element with cost in class
+                '.fee-amount',  # Common pattern
+                '.consultation-cost',  # Common pattern
+                '.doctor-fee',  # Direct naming
+                '.price-value',  # Price pattern
+                'span[data-qa*="fee"]',  # Data attribute
+                'div[data-qa*="fee"]',  # Data attribute
+                '*[data-fee]',  # Data fee attribute
+                '*[data-price]',  # Data price attribute
+                'span.fee',  # Simple fee class
+                '.fees .amount',  # Nested structure
+                '.pricing .amount',  # Pricing structure
+                '.consultation .fee',  # Consultation fee
+                '*:contains("₹")',  # Text containing rupee symbol
+                '*:contains("consultation")',  # Text containing consultation
+            ]
             
-            # Only yield if we have essential data
-            if item.get('name') and item.get('consultation_fee'):
+            for selector in fee_selectors:
+                try:
+                    if 'contains' in selector:
+                        # For text-based selectors, search through elements
+                        elements = await page.query_selector_all('span, div, p, strong, b')
+                        for elem in elements:
+                            text = await elem.inner_text() if elem else ""
+                            if text and ('₹' in text or 'consultation' in text.lower() or 'fee' in text.lower()):
+                                # Check if it contains numbers and currency symbols
+                                if re.search(r'[₹$]\s*\d+|^\d+\s*[₹$]|\d+\s*(?:rupees?|rs\.?)', text, re.IGNORECASE):
+                                    consultation_fee = text.strip()
+                                    self.logger.debug(f"Found fee with text search: {consultation_fee}")
+                                    break
+                        if consultation_fee:
+                            break
+                    else:
+                        element = await page.query_selector(selector)
+                        if element:
+                            text = await element.inner_text()
+                            if text and text.strip():
+                                # Validate that this looks like a fee (contains digits and possibly currency)
+                                if re.search(r'\d+', text):
+                                    consultation_fee = text.strip()
+                                    self.logger.debug(f"Found fee with selector '{selector}': {consultation_fee}")
+                                    break
+                except Exception as e:
+                    self.logger.debug(f"Error with fee selector '{selector}': {e}")
+                    continue
+            
+            # If still no fee found, try a broader search
+            if not consultation_fee:
+                try:
+                    # Search for any text that looks like a fee amount
+                    all_text_elements = await page.query_selector_all('*')
+                    for elem in all_text_elements:
+                        try:
+                            text = await elem.inner_text() if elem else ""
+                            if text and re.search(r'[₹$]\s*[0-9]{2,4}|[0-9]{2,4}\s*[₹$]|[0-9]{2,4}\s*(?:rupees?|rs\.?)', text, re.IGNORECASE):
+                                # Make sure it's not just a year or experience
+                                if not re.search(r'(19|20)\d{2}|years?|experience', text, re.IGNORECASE):
+                                    consultation_fee = text.strip()
+                                    self.logger.debug(f"Found fee with broad search: {consultation_fee}")
+                                    break
+                        except Exception:
+                            continue
+                except Exception as e:
+                    self.logger.debug(f"Error in broad fee search: {e}")
+            
+            item['consultation_fee'] = consultation_fee or ""
+            
+            # Always yield if we have a name and profile URL - consultation fee is optional now
+            if item.get('name') and item.get('profile_url'):
                 yield item
             else:
-                self.logger.warning(f"Skipping incomplete profile: {response.url}")
+                self.logger.warning(f"Skipping incomplete profile (missing name or URL): {response.url}")
                 
         except Exception as e:
             self.logger.error(f"Error parsing doctor profile {response.url}: {str(e)}")
