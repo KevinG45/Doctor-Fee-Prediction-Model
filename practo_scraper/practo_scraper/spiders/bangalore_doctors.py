@@ -40,6 +40,7 @@ except ImportError:
         'specialty_links': 'a[href*="/bangalore/"][href*="-doctors"]',
         'doctor_profile_links': 'a[href*="/doctor/"]',
         'doctor_name': 'h1[data-qa-id="doctor_name"], h1.c-profile__title',
+        'google_map_link': 'a[href*="maps.google.com"], a[href*="goo.gl/maps"], a[href*="google.com/maps"]'
     }
 
 
@@ -229,6 +230,16 @@ class BangaloreDoctorsSpider(scrapy.Spider):
             location_element = await page.query_selector(SELECTORS['location'])
             item['location'] = await location_element.inner_text() if location_element else city
             
+            # Google Maps link extraction
+            map_element = await page.query_selector(SELECTORS['google_map_link'])
+            if map_element:
+                map_href = await map_element.get_attribute('href')
+                item['google_map_link'] = map_href if map_href else ""
+                self.logger.info(f"Found Google Maps link for {item['name']}: {map_href}")
+            else:
+                # Try alternative approaches to find map links
+                item['google_map_link'] = await self.find_map_link_alternative(page)
+            
             # Additional fields
             item['city'] = city
             item['profile_url'] = response.url
@@ -314,6 +325,34 @@ class BangaloreDoctorsSpider(scrapy.Spider):
         except Exception as e:
             self.logger.error(f"Error handling pagination: {str(e)}")
     
+    async def find_map_link_alternative(self, page):
+        """
+        Alternative method to find Google Maps links if primary selector fails
+        """
+        try:
+            # Try to find any links containing map-related keywords
+            map_selectors = [
+                'a[href*="maps"]',
+                'a[href*="directions"]',
+                'a[title*="map"]',
+                'a[title*="Map"]',
+                '.map-container a',
+                '.location-map a'
+            ]
+            
+            for selector in map_selectors:
+                elements = await page.query_selector_all(selector)
+                for element in elements:
+                    href = await element.get_attribute('href')
+                    if href and ('maps.google.com' in href or 'goo.gl/maps' in href or 'google.com/maps' in href):
+                        self.logger.info(f"Found map link via alternative method: {href}")
+                        return href
+            
+            return ""
+        except Exception as e:
+            self.logger.error(f"Error in alternative map link search: {str(e)}")
+            return ""
+
     def extract_specialty_from_url(self, url):
         """Extract specialty name from URL"""
         try:

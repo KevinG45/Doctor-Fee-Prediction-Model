@@ -64,5 +64,6 @@ SELECTORS = {
     'consultation_fee': '[data-qa-id="consultation_fee"], .fee-container',
     'experience': '[data-qa-id="doctor_experience"], .experience',
     'rating': '[data-qa-id="doctor_rating"], .rating',
-    'location': '[data-qa-id="doctor_location"], .location'
+    'location': '[data-qa-id="doctor_location"], .location',
+    'google_map_link': 'a[href*="maps.google.com"], a[href*="goo.gl/maps"], a[href*="google.com/maps"], .map-link, [data-qa-id="map_link"]'
 }

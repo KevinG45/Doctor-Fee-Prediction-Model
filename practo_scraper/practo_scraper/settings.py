@@ -12,18 +12,19 @@ BOT_NAME = "practo_scraper"
 SPIDER_MODULES = ["practo_scraper.spiders"]
 NEWSPIDER_MODULE = "practo_scraper.spiders"
 
+ADDONS = {}
+
 # Crawl responsibly by identifying yourself (and your website) on the user-agent
 USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 
-# Obey robots.txt rules - IMPORTANT for compliance
-ROBOTSTXT_OBEY = True
+# Obey robots.txt rules
+ROBOTSTXT_OBEY = False
 
-# Concurrency and throttling settings - Conservative for respectful scraping
-CONCURRENT_REQUESTS = 4
-CONCURRENT_REQUESTS_PER_DOMAIN = 1
-CONCURRENT_REQUESTS_PER_IP = 1
-DOWNLOAD_DELAY = 3
-RANDOMIZE_DOWNLOAD_DELAY = True
+# Concurrency and throttling settings
+CONCURRENT_REQUESTS = 8
+CONCURRENT_REQUESTS_PER_DOMAIN = 2
+CONCURRENT_REQUESTS_PER_IP = 2
+DOWNLOAD_DELAY = 2
 
 # Disable cookies (enabled by default)
 COOKIES_ENABLED = False
@@ -51,18 +52,18 @@ DOWNLOADER_MIDDLEWARES = {
     "practo_scraper.middlewares.PractoScraperDownloaderMiddleware": 543,
 }
 
-# Configure Playwright Download Handler
-DOWNLOAD_HANDLERS = {
-    "http": "scrapy_playwright.handler.ScrapyPlaywrightDownloadHandler",
-    "https": "scrapy_playwright.handler.ScrapyPlaywrightDownloadHandler",
-}
+# Configure Playwright Download Handler - TEMPORARILY DISABLED for testing
+# DOWNLOAD_HANDLERS = {
+#     "http": "scrapy_playwright.handler.ScrapyPlaywrightDownloadHandler",
+#     "https": "scrapy_playwright.handler.ScrapyPlaywrightDownloadHandler",
+# }
 
-# Configure Playwright
-PLAYWRIGHT_BROWSER_TYPE = "chromium"
-PLAYWRIGHT_LAUNCH_OPTIONS = {
-    "headless": True,
-    "timeout": 30000,
-}
+# Configure Playwright - TEMPORARILY DISABLED for testing
+# PLAYWRIGHT_BROWSER_TYPE = "chromium"
+# PLAYWRIGHT_LAUNCH_OPTIONS = {
+#     "headless": True,
+#     "timeout": 30000,
+# }
 
 # Enable or disable extensions
 # See https://docs.scrapy.org/en/latest/topics/extensions.html
@@ -73,9 +74,11 @@ PLAYWRIGHT_LAUNCH_OPTIONS = {
 # Configure item pipelines
 # See https://docs.scrapy.org/en/latest/topics/item-pipeline.html
 ITEM_PIPELINES = {
+    "practo_scraper.pipelines.DeduplicationPipeline": 200,
     "practo_scraper.pipelines.ValidationPipeline": 300,
     "practo_scraper.pipelines.CleaningPipeline": 400,
     "practo_scraper.pipelines.CsvExportPipeline": 500,
+    "practo_scraper.pipelines.DatabasePipeline": 600,
 }
 
 # Enable and configure the AutoThrottle extension (disabled by default)
@@ -110,11 +113,11 @@ LOG_FILE = "scrapy.log"
 
 # Custom settings for feeds
 FEEDS = {
-    "data/bangalore_doctors_%(time)s.csv": {
+    "data/doctors_%(time)s.csv": {
         "format": "csv",
         "encoding": "utf8",
         "store_empty": False,
-        "fields": ["name", "speciality", "year_of_experience", "location", "city", "dp_score", "consultation_fee", "profile_url"],
+        "fields": ["name", "speciality", "degree", "year_of_experience", "location", "city", "dp_score", "npv", "consultation_fee", "profile_url", "scraped_at", "google_map_link"],
     },
 }
 

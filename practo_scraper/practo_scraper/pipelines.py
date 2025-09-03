@@ -80,6 +80,10 @@ class CleaningPipeline:
         if adapter.get('consultation_fee'):
             adapter['consultation_fee'] = self.extract_fee_amount(adapter['consultation_fee'])
         
+        # Clean and validate Google Maps link
+        if adapter.get('google_map_link'):
+            adapter['google_map_link'] = self.clean_map_link(adapter['google_map_link'])
+        
         # Add timestamp
         adapter['scraped_at'] = datetime.now().isoformat()
         
@@ -231,6 +235,37 @@ class CleaningPipeline:
         
         return 0
     
+    def clean_map_link(self, map_link):
+        """Clean and validate Google Maps link"""
+        if not map_link:
+            return ""
+        
+        map_str = str(map_link).strip()
+        
+        # Check if it's a valid Google Maps URL
+        valid_domains = ['maps.google.com', 'google.com/maps', 'goo.gl/maps']
+        if any(domain in map_str for domain in valid_domains):
+            # Remove any extra parameters that might cause issues
+            if '?' in map_str and '&' in map_str:
+                # Keep only essential parameters
+                essential_params = ['q', 'll', 'place_id']
+                url_parts = map_str.split('?')
+                if len(url_parts) == 2:
+                    base_url, params = url_parts
+                    param_pairs = params.split('&')
+                    filtered_params = []
+                    for param in param_pairs:
+                        if any(essential in param for essential in essential_params):
+                            filtered_params.append(param)
+                    if filtered_params:
+                        return f"{base_url}?{'&'.join(filtered_params)}"
+                    else:
+                        return base_url
+            return map_str
+        
+        # If not a valid Google Maps link, return empty
+        return ""
+    
     def is_valid_location(self, location):
         """Check if a location is valid and not HTML garbage"""
         if not location or not location.strip():
@@ -268,16 +303,36 @@ class CleaningPipeline:
         if not map_link:
             return city or "Location Unknown"
         
-        # Extract coordinates from map link
-        coord_pattern = r'maps/place/(-?\d+\.?\d*),(-?\d+\.?\d*)'
-        match = re.search(coord_pattern, str(map_link))
-        if match:
-            try:
-                lat, lng = float(match.group(1)), float(match.group(2))
-                # For now, just return city with coordinates info
-                return f"{city} ({lat:.3f}, {lng:.3f})"
-            except ValueError:
-                pass
+        # Try multiple coordinate extraction patterns
+        coord_patterns = [
+            r'maps/place/(-?\d+\.?\d*),(-?\d+\.?\d*)',  # Original pattern
+            r'@(-?\d+\.?\d*),(-?\d+\.?\d*)',            # @lat,lng format
+            r'll=(-?\d+\.?\d*),(-?\d+\.?\d*)',          # ll=lat,lng format
+            r'q=(-?\d+\.?\d*),(-?\d+\.?\d*)',           # q=lat,lng format
+        ]
+        
+        for pattern in coord_patterns:
+            match = re.search(pattern, str(map_link))
+            if match:
+                try:
+                    lat, lng = float(match.group(1)), float(match.group(2))
+                    # Return city with coordinates info
+                    return f"{city} ({lat:.3f}, {lng:.3f})"
+                except ValueError:
+                    continue
+        
+        # Try to extract place name from URL
+        place_patterns = [
+            r'maps/place/([^/@]+)',  # Place name after maps/place/
+            r'q=([^&@]+)',           # Query parameter
+        ]
+        
+        for pattern in place_patterns:
+            match = re.search(pattern, str(map_link))
+            if match:
+                place_name = match.group(1).replace('+', ' ').replace('%20', ' ')
+                if place_name and len(place_name) > 3:
+                    return place_name.title()
         
         # If extraction fails, fall back to city
         return city or "Location Unknown"

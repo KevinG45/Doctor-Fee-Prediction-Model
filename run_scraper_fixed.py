@@ -1,49 +1,25 @@
 #!/usr/bin/env python3
 """
-Bangalore Practo Doctor Scraper Runner
-
-This script runs the new robots.txt compliant web scraping solution using 
-Scrapy framework and Playwright to extract doctor information from 
-Practo website starting from https://www.practo.com/bangalore.
-
-The scraper navigates naturally through the site structure rather than 
-using search URLs (which are disallowed by robots.txt).
-
-Features:
-- Extracts doctor profiles, fees, ratings, and experience
-- Collects Google Maps location links when available
-- Robots.txt compliant navigation
-- Comprehensive data cleaning and validation
-
-Usage:
-    python run_bangalore_scraper.py [options]
-    
-Examples:
-    python run_bangalore_scraper.py                    # Run with default settings
-    python run_bangalore_scraper.py --headless=false   # Run with visible browser
-    python run_bangalore_scraper.py --output=doctors.csv # Custom output file
+Enhanced Bangalore Scraper with Reactor Fix
 """
 
-import os
+# Install asyncio reactor FIRST, before any other imports
 import sys
+if 'twisted.internet.reactor' not in sys.modules:
+    try:
+        import twisted.internet.asyncioreactor
+        twisted.internet.asyncioreactor.install()
+        print("✅ AsyncIO reactor installed")
+    except Exception as e:
+        print(f"⚠️  Reactor installation warning: {e}")
+
+import os
 import argparse
 import subprocess
 from pathlib import Path
 
-# Install asyncio reactor before any Twisted imports
-def install_reactor():
-    """Install the asyncio reactor required for scrapy-playwright"""
-    try:
-        import twisted.internet.asyncioreactor
-        twisted.internet.asyncioreactor.install()
-    except ImportError:
-        pass  # Reactor may already be installed
-
 def main():
-    # Install the asyncio reactor first
-    install_reactor()
-    
-    parser = argparse.ArgumentParser(description='Run Bangalore Practo doctor data scraper')
+    parser = argparse.ArgumentParser(description='Run Bangalore Practo doctor data scraper (Fixed Version)')
     parser.add_argument('--output', '-o', help='Output CSV file path')
     parser.add_argument('--headless', default='true', 
                        help='Run browser in headless mode (true/false)')
@@ -79,9 +55,14 @@ def main():
     
     if args.verbose:
         settings.append('LOG_LEVEL=DEBUG')
+    else:
+        settings.append('LOG_LEVEL=INFO')
     
     if args.limit:
         settings.append(f'CLOSESPIDER_ITEMCOUNT={args.limit}')
+    
+    # Force asyncio reactor
+    settings.append('TWISTED_REACTOR=twisted.internet.asyncioreactor.AsyncioSelectorReactor')
     
     # Add settings to command
     for setting in settings:
@@ -112,8 +93,16 @@ def main():
             else:
                 print("\n⚠️  No CSV files found in data directory")
         
+        # Also check for any CSV files in current directory
+        current_csv = list(Path('.').glob('*.csv'))
+        if current_csv:
+            print(f"\n📊 CSV files in current directory:")
+            for csv_file in current_csv:
+                print(f"  - {csv_file}")
+        
     except subprocess.CalledProcessError as e:
         print(f"\n❌ Scraping failed with exit code: {e.returncode}")
+        print("💡 Try checking the log file: scrapy.log")
         sys.exit(e.returncode)
     except KeyboardInterrupt:
         print("\n⚠️  Scraping interrupted by user")
