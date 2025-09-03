@@ -29,7 +29,8 @@ class ValidationPipeline:
         # Don't drop items just because consultation fee is missing - that's what we're trying to fix
         # Instead, set a default value or flag for missing fees
         if not adapter.get('consultation_fee'):
-            spider.logger.warning(f"Missing consultation fee for {adapter.get('name')} - keeping item anyway")
+            if hasattr(spider, 'logger') and spider.logger:
+                spider.logger.warning(f"Missing consultation fee for {adapter.get('name')} - keeping item anyway")
             adapter['consultation_fee'] = ""  # Set empty string instead of dropping
             
         return item
