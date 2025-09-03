@@ -7,6 +7,19 @@
 #     https://docs.scrapy.org/en/latest/topics/downloader-middleware.html
 #     https://docs.scrapy.org/en/latest/topics/spider-middleware.html
 
+# Fix for Playwright AsyncIO reactor
+import sys
+import asyncio
+import platform
+
+# Windows-specific fix for ProactorEventLoop issue
+if platform.system() == 'Windows':
+    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+
+if 'twisted.internet.reactor' not in sys.modules:
+    import twisted.internet.asyncioreactor
+    twisted.internet.asyncioreactor.install()
+
 BOT_NAME = "practo_scraper"
 
 SPIDER_MODULES = ["practo_scraper.spiders"]
