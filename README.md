@@ -1,18 +1,111 @@
-##  <img src="https://media.tenor.com/Wq-8a2yGCSkAAAAi/stethoscope-stethoscope-images.gif" width="48" height="48"> Doctor Fee Prediction
+## 🏥 Doctor Fee Prediction - Bangalore Practo Scraper
 
+This project creates a web interface that allows users to predict doctor consultation fees based on input data. The machine learning model is trained on a dataset obtained by scraping data from the Practo website using a **robots.txt compliant** Scrapy + Playwright implementation.
 
-This project aims to create a web interface that allows users to predict doctor consultation fees based on their input. The machine learning model was trained on a dataset obtained by scraping data from the Practo website using Selenium. With the use of Python Pandas, the scraped data was thoroughly cleaned & preprocessed for accurate predictions.
-##  <img src="https://user-images.githubusercontent.com/106439762/181935629-b3c47bd3-77fb-4431-a11c-ff8ba0942b63.gif" width="48" height="48"> **User's Manual**
+### 🚀 **New Scraping Implementation**
 
-| Files/Folder| Description |
-| ------------- | ------------- |
-| **Dataset Folder** | This folder provides data state wise in csv format |
-| **Python File** | This contains the .ipynb file of the analysis for Data Extract, Data cleaning, EDA and ML Models.  |
-| **HTML File** | This contains the .html file for User Interface.  |
+The scraper has been completely redesigned to:
+- ✅ **Respect robots.txt** - No longer uses disallowed search URLs
+- ✅ **Navigate naturally** - Starts from https://www.practo.com/bangalore and follows site structure
+- ✅ **JavaScript support** - Uses Playwright for heavy JavaScript navigation
+- ✅ **Focused approach** - Specifically targets Bangalore doctors as requested
 
-<br>
+### 🔧 **How It Works**
 
-<p align="center"><img src="https://images.unsplash.com/photo-1584982751601-97dcc096659c?q=80&w=2072&auto=format&fit=crop&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D" width="400" ></p>
+```
+1. Start at https://www.practo.com/bangalore
+2. Discover specialty pages (e.g., /bangalore/cardiologist-doctors)  
+3. Navigate through each specialty to find doctors
+4. Extract individual doctor profile data
+```
+
+### 🏃‍♂️ **Quick Start**
+
+```bash
+# Install dependencies
+pip install -r requirements.txt
+
+# Install Playwright browsers
+playwright install chromium
+
+# Run the scraper
+python run_bangalore_scraper.py
+```
+
+### 📋 **Usage Examples**
+
+```bash
+# Basic usage
+python run_bangalore_scraper.py
+
+# Custom output file
+python run_bangalore_scraper.py --output bangalore_doctors.csv
+
+# Run with visible browser (for debugging)
+python run_bangalore_scraper.py --headless=false
+
+# Limit results for testing
+python run_bangalore_scraper.py --limit 50
+
+# Verbose logging
+python run_bangalore_scraper.py --verbose
+```
+
+### 🤖 **Robots.txt Compliance**
+
+The scraper respects Practo's robots.txt by:
+- ❌ Avoiding search URLs (`/*?searchfor=doctor&q=*`)
+- ❌ Not using general search endpoints (`/search*`)
+- ✅ Using natural site navigation
+- ✅ Following profile URLs which are allowed
+### 📊 **Data Output**
+
+The scraper extracts:
+- 👨‍⚕️ **Doctor Name**
+- 🏥 **Specialty** (Cardiologist, Dentist, etc.)
+- 📅 **Years of Experience**
+- 📍 **Location/Area**
+- ⭐ **Rating/Score**
+- 💰 **Consultation Fee**
+- 🔗 **Profile URL**
+
+### 🗂️ **Project Structure**
+
+```
+Doctor-Fee-Prediction-Model/
+├── requirements.txt                    # Dependencies
+├── config.py                          # Configuration settings
+├── run_bangalore_scraper.py           # Main runner script
+├── practo_scraper/                    # Scrapy project
+│   ├── scrapy.cfg                    # Scrapy configuration
+│   └── practo_scraper/
+│       ├── settings.py               # Scrapy settings
+│       ├── items.py                  # Data structure definitions
+│       ├── pipelines.py              # Data processing pipelines
+│       ├── middlewares.py            # Custom middlewares
+│       └── spiders/
+│           ├── bangalore_doctors.py  # Main robots.txt compliant spider
+│           └── __init__.py
+└── data/                             # Output directory
+    └── *.csv                        # Generated data files
+```
+
+### ⚙️ **Configuration**
+
+Edit `config.py` to customize:
+- **Base URLs** and target pages
+- **CSS Selectors** for data extraction  
+- **Browser settings** for Playwright
+- **Output format** and file naming
+
+### 🛡️ **Ethical Scraping**
+
+This implementation follows best practices:
+- ✅ Respects robots.txt completely
+- ✅ Conservative request delays (3+ seconds)
+- ✅ Single concurrent request per domain
+- ✅ Proper user agent identification
+- ✅ Graceful error handling
 
    
 ## Findings from the Doctor Fee Prediction Project 🧪

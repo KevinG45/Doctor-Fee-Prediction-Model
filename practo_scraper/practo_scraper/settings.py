@@ -7,37 +7,23 @@
 #     https://docs.scrapy.org/en/latest/topics/downloader-middleware.html
 #     https://docs.scrapy.org/en/latest/topics/spider-middleware.html
 
-# Fix for Playwright AsyncIO reactor
-import sys
-import asyncio
-import platform
-
-# Windows-specific fix for ProactorEventLoop issue
-if platform.system() == 'Windows':
-    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
-
-if 'twisted.internet.reactor' not in sys.modules:
-    import twisted.internet.asyncioreactor
-    twisted.internet.asyncioreactor.install()
-
 BOT_NAME = "practo_scraper"
 
 SPIDER_MODULES = ["practo_scraper.spiders"]
 NEWSPIDER_MODULE = "practo_scraper.spiders"
 
-ADDONS = {}
-
 # Crawl responsibly by identifying yourself (and your website) on the user-agent
 USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 
-# Obey robots.txt rules
-ROBOTSTXT_OBEY = False
+# Obey robots.txt rules - IMPORTANT for compliance
+ROBOTSTXT_OBEY = True
 
-# Concurrency and throttling settings
-CONCURRENT_REQUESTS = 8
-CONCURRENT_REQUESTS_PER_DOMAIN = 2
-CONCURRENT_REQUESTS_PER_IP = 2
-DOWNLOAD_DELAY = 2
+# Concurrency and throttling settings - Conservative for respectful scraping
+CONCURRENT_REQUESTS = 4
+CONCURRENT_REQUESTS_PER_DOMAIN = 1
+CONCURRENT_REQUESTS_PER_IP = 1
+DOWNLOAD_DELAY = 3
+RANDOMIZE_DOWNLOAD_DELAY = True
 
 # Disable cookies (enabled by default)
 COOKIES_ENABLED = False
@@ -87,11 +73,9 @@ PLAYWRIGHT_LAUNCH_OPTIONS = {
 # Configure item pipelines
 # See https://docs.scrapy.org/en/latest/topics/item-pipeline.html
 ITEM_PIPELINES = {
-    "practo_scraper.pipelines.DeduplicationPipeline": 200,
     "practo_scraper.pipelines.ValidationPipeline": 300,
     "practo_scraper.pipelines.CleaningPipeline": 400,
     "practo_scraper.pipelines.CsvExportPipeline": 500,
-    "practo_scraper.pipelines.DatabasePipeline": 600,
 }
 
 # Enable and configure the AutoThrottle extension (disabled by default)
@@ -126,11 +110,11 @@ LOG_FILE = "scrapy.log"
 
 # Custom settings for feeds
 FEEDS = {
-    "data/doctors_%(time)s.csv": {
+    "data/bangalore_doctors_%(time)s.csv": {
         "format": "csv",
         "encoding": "utf8",
         "store_empty": False,
-        "fields": ["name", "speciality", "degree", "year_of_experience", "location", "city", "dp_score", "npv", "consultation_fee", "profile_url", "scraped_at", "google_map_link"],
+        "fields": ["name", "speciality", "year_of_experience", "location", "city", "dp_score", "consultation_fee", "profile_url"],
     },
 }
 
