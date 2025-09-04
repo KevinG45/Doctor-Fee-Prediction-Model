@@ -102,6 +102,15 @@ HTTPCACHE_DIR = "httpcache"
 HTTPCACHE_IGNORE_HTTP_CODES = [500, 502, 503, 504, 408, 429]
 HTTPCACHE_STORAGE = "scrapy.extensions.httpcache.FilesystemCacheStorage"
 
+# Enhanced pipelines for comprehensive data processing
+ITEM_PIPELINES = {
+    'practo_scraper.pipelines.ValidationPipeline': 300,
+    'practo_scraper.pipelines.CleaningPipeline': 400,
+    'practo_scraper.pipelines.DeduplicationPipeline': 500,
+    'practo_scraper.pipelines.CsvExportPipeline': 600,
+    'practo_scraper.pipelines.DatabasePipeline': 700,
+}
+
 # Retry configuration
 RETRY_ENABLED = True
 RETRY_TIMES = 3
