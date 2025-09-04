@@ -121,3 +121,23 @@ data/*.xlsx
 *.temp
 .DS_Store
 Thumbs.db
+
+# Scrapy-specific ignores
+practo_scraper/scrapy.log*
+practo_scraper/httpcache/
+practo_scraper/data/*.csv
+practo_scraper/data/*.db
+
+# Generated output files
+*doctors*.csv
+bangalore*.csv
+test_output.csv
+quick_test.csv
+
+# Log files
+scraper_runner.log
+logs/
+*.log
+
+# Temporary scrapy files
+.scrapy/
