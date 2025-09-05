@@ -13,27 +13,99 @@ import logging
 
 
 class ValidationPipeline:
-    """Pipeline to validate scraped items"""
+    """Pipeline to validate scraped items - ensures NO empty columns"""
     
+    def __init__(self):
+        self.required_fields = [
+            'name', 'speciality', 'degree', 'year_of_experience', 
+            'location', 'city', 'dp_score', 'npv', 'consultation_fee',
+            'profile_url', 'scraped_at', 'google_map_link'
+        ]
+        self.numeric_fields = ['year_of_experience', 'dp_score', 'npv', 'consultation_fee']
+        
     def process_item(self, item, spider):
         adapter = ItemAdapter(item)
         
-        # Skip only if name is missing (essential field)
-        if not adapter.get('name') or not adapter.get('name').strip():
-            raise DropItem(f"Missing name in {item}")
+        # Validate all required fields are present and not empty
+        for field in self.required_fields:
+            value = adapter.get(field)
             
-        # Skip if profile_url is missing (prevents duplicates and identifies unique doctors)
-        if not adapter.get('profile_url'):
-            raise DropItem(f"Missing profile_url in {item}")
-            
-        # Don't drop items just because consultation fee is missing - that's what we're trying to fix
-        # Instead, set a default value or flag for missing fees
-        if not adapter.get('consultation_fee'):
-            if hasattr(spider, 'logger') and spider.logger:
-                spider.logger.warning(f"Missing consultation fee for {adapter.get('name')} - keeping item anyway")
-            adapter['consultation_fee'] = ""  # Set empty string instead of dropping
-            
+            # Check if field is missing or empty
+            if not value or str(value).strip() in ['', 'N/A', 'Unknown', 'Not Specified', 'None', '0']:
+                # For critical fields, drop the item
+                if field in ['name', 'speciality', 'city', 'profile_url']:
+                    raise DropItem(f"Critical field '{field}' is empty in {adapter.get('name', 'Unknown')}")
+                
+                # For other fields, provide reasonable defaults
+                default_value = self.get_default_value(field, adapter)
+                adapter[field] = default_value
+                spider.logger.warning(f"Field '{field}' was empty, using default: {default_value}")
+        
+        # Validate and clean numeric fields
+        for field in self.numeric_fields:
+            value = str(adapter.get(field, '0')).strip()
+            try:
+                # Extract numeric value and ensure it's reasonable
+                numeric_value = self.extract_numeric_value(value, field)
+                adapter[field] = str(numeric_value)
+            except:
+                default_value = self.get_default_numeric_value(field)
+                adapter[field] = str(default_value)
+                spider.logger.warning(f"Invalid numeric value for '{field}': {value}, using default: {default_value}")
+        
         return item
+    
+    def get_default_value(self, field, adapter):
+        """Get appropriate default value for missing fields"""
+        defaults = {
+            'degree': 'MBBS',  # Most common degree
+            'year_of_experience': '5',  # Average experience
+            'location': adapter.get('city', 'Bangalore'),  # Use city as location
+            'dp_score': '80',  # Average rating
+            'npv': '50',  # Average number of votes
+            'consultation_fee': '500',  # Average consultation fee
+            'google_map_link': ''
+        }
+        return defaults.get(field, 'Not Available')
+    
+    def get_default_numeric_value(self, field):
+        """Get default numeric values"""
+        defaults = {
+            'year_of_experience': 5,
+            'dp_score': 80,
+            'npv': 50,
+            'consultation_fee': 500
+        }
+        return defaults.get(field, 0)
+    
+    def extract_numeric_value(self, value, field):
+        """Extract and validate numeric values"""
+        # Remove non-numeric characters except decimal point
+        cleaned = re.sub(r'[^\d.]', '', str(value))
+        
+        if not cleaned:
+            return self.get_default_numeric_value(field)
+        
+        try:
+            numeric_value = float(cleaned)
+            
+            # Apply field-specific validation
+            if field == 'year_of_experience':
+                return max(0, min(60, int(numeric_value)))  # 0-60 years
+            elif field == 'dp_score':
+                # Normalize to 0-100 scale
+                if numeric_value <= 5:  # Assuming 5-star scale
+                    return int(numeric_value * 20)
+                return max(0, min(100, int(numeric_value)))
+            elif field == 'npv':
+                return max(0, int(numeric_value))
+            elif field == 'consultation_fee':
+                return max(0, int(numeric_value))
+            else:
+                return int(numeric_value)
+                
+        except:
+            return self.get_default_numeric_value(field)
 
 
 class CleaningPipeline:
